@@ -1,0 +1,11 @@
+{
+  "name": "oauth-test-app-otp-server",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": { "start": "node index.js" },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "node-telegram-bot-api": "^0.67.0"
+  }
+}
