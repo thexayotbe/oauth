@@ -3,7 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { signInWithFacebook } from '../auth/facebookAuth';
 import { signInWithGoogle } from '../auth/googleAuth';
 
-type Props = { onSignedIn: () => void };
+type Props = { onSignedIn: () => void; onEmailSelected: () => void };
 
 function messageFrom(error: unknown) {
   if (!(error instanceof Error)) {
@@ -14,7 +14,7 @@ function messageFrom(error: unknown) {
   return code ? `${error.message} (${code})` : error.message;
 }
 
-export default function AuthScreen({ onSignedIn }: Props) {
+export default function AuthScreen({ onSignedIn, onEmailSelected }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -43,6 +43,9 @@ export default function AuthScreen({ onSignedIn }: Props) {
       <TouchableOpacity disabled={loading} style={[styles.button, styles.facebook]} onPress={() => signIn(signInWithFacebook)}>
         <Text style={styles.buttonText}>Продолжить с Facebook</Text>
       </TouchableOpacity>
+      <TouchableOpacity disabled={loading} style={[styles.button, styles.email]} onPress={onEmailSelected}>
+        <Text style={styles.buttonText}>Продолжить с Email</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -54,6 +57,7 @@ const styles = StyleSheet.create({
   spinner: { marginBottom: 12 },
   button: { backgroundColor: '#4285F4', borderRadius: 8, marginBottom: 12, padding: 14 },
   facebook: { backgroundColor: '#1877F2' },
+  email: { backgroundColor: '#0a7d33' },
   buttonText: { color: '#fff', fontWeight: '600', textAlign: 'center' },
   error: { color: '#b00020', marginBottom: 12, textAlign: 'center' },
 });

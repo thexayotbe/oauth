@@ -9,5 +9,8 @@ export async function signOutEverywhere() {
     await GoogleSignin.signOut();
   } catch {}
 
-  await firebaseSignOut(getAuth());
+  const auth = getAuth();
+  if (auth.currentUser) {
+    await firebaseSignOut(auth);
+  }
 }

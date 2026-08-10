@@ -28,3 +28,11 @@ export function sendOtp(phone: string) {
 export function verifyOtp(phone: string, code: string) {
   return post('/verify-otp', { phone, code });
 }
+
+export function sendEmailOtp(email: string) {
+  return post('/send-email-otp', { email });
+}
+
+export function verifyEmailOtp(email: string, code: string) {
+  return post('/verify-email-otp', { email, code });
+}
