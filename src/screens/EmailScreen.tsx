@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, StyleSheet, Text, TextInput, TouchableOpacity, View,KeyboardAvoidingView, Platform } from 'react-native';
 import { requestEmailCode, signInWithEmailCode } from '../auth/emailAuth';
 import { sendEmailOtp, verifyEmailOtp } from '../api/otpApi';
+import { getAuth, signInWithCustomToken } from '@react-native-firebase/auth';
 
 type Props = { onSignedIn: () => void; onCancel: () => void };
 
@@ -63,18 +64,28 @@ export default function EmailScreen({ onSignedIn, onCancel }: Props) {
   const verify = () => {
     if (code.length !== 6) return setError('Введите 6-значный код.');
     return run(async () => {
-      Keyboard.dismiss();
+      try{
+        Keyboard.dismiss();
       await new Promise<void>(resolve => setTimeout(resolve, 300));
       const result = await verifyEmailOtp(email.trim(), code);
       if (!result.ok) throw new Error(result.error ?? 'неверный код');
+      if (!result.firebaseToken) throw new Error('Сервер не вернул токен.');
+      await signInWithCustomToken(getAuth(), result.firebaseToken);
+      await new Promise<void>(resolve => setTimeout(resolve, 300));
 
       onSignedIn();
-
+      } 
+      catch(actionError){
+        setError(actionError instanceof Error ? actionError.message : 'Что-то пошло не так.');
+      }
+      finally{
+        setLoading(false);
+      }
     });
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={styles.container}>
       <Text style={styles.title}>Вход по email</Text>
       {!!error && <Text style={styles.error}>{error}</Text>}
       {!sent ? (
@@ -125,7 +136,7 @@ export default function EmailScreen({ onSignedIn, onCancel }: Props) {
         <Text style={styles.link}>Другой способ входа</Text>
       </TouchableOpacity>
       {loading && <ActivityIndicator style={styles.spinner} />}
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

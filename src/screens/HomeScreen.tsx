@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { signOutEverywhere } from '../auth/signOut';
-
+import { Alert } from 'react-native';
+import { deleteAccount } from '../auth/deleteAccount';
 type Props = { onSignedOut: () => void };
 
 export default function HomeScreen({ onSignedOut }: Props) {
@@ -21,6 +22,28 @@ export default function HomeScreen({ onSignedOut }: Props) {
     }
   };
 
+  const removeAccount = async () =>{
+    Alert.alert("удалить аккаунт?", 'вы уверены?', [ 
+      {
+        text: "отмена", style: "cancel"
+      },
+      {
+        text: "удалить", style: "destructive", onPress: async () =>{
+          setLoading(true);
+          setError('');
+          try {
+            await deleteAccount();
+            onSignedOut();
+          }catch(e){
+            setError('не получилось')
+          }finally{
+            setLoading(false);
+          }
+        }
+      }
+    ])
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Вы полностью авторизованы</Text>
@@ -32,6 +55,12 @@ export default function HomeScreen({ onSignedOut }: Props) {
         onPress={logOut}
         style={[styles.button, loading && styles.disabled]}>
         <Text style={styles.buttonText}>Выйти</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        disabled={loading}
+        onPress={removeAccount}
+        style={[styles.button, styles.deleteBtn, loading && styles.disabled]}>
+        <Text style={styles.buttonText}>Удалить аккаунт</Text>
       </TouchableOpacity>
     </View>
   );
@@ -46,4 +75,6 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontWeight: '600', textAlign: 'center' },
   error: { color: '#b00020', marginBottom: 12, textAlign: 'center' },
   spinner: { marginBottom: 12 },
+  deleteBtn: { backgroundColor: '#333', marginTop: 12 },
+
 });

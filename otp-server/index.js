@@ -239,5 +239,28 @@ app.get('/me', requireAuth, async (req, res) => {
   return res.json({ ok: true, isActive: !!snap.data().isActive });
 });
 
+app.delete('/account', requireAuth, async (req, res) => {
+  const { uid} = req.user;
+
+  try {
+    const userRecord = await auth.getUser(uid);
+    const phone = userRecord.phoneNumber
+      ? onlyDigits(userRecord.phoneNumber)
+      : null;
+    const email = userRecord.email ? normalizeEmail(userRecord.email) : null;
+
+    await auth.revokeRefreshTokens(uid);
+    await auth.deleteUser(uid);
+    await db.collection('users').doc(uid).delete().catch(() => {});
+
+    if (phone) await consume(phone).catch(() => {});
+    if (email) await consume(email).catch(() => {});
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('[delete-account]', e);
+    return res.status(500).json({ ok: false, error: 'не удалось удалить.' });
+  }
+});
+
 
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => console.log('OTP server listening.'));

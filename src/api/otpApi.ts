@@ -65,3 +65,19 @@ export function verifyEmailOtp(email: string, code: string) {
 export function registerUser() {
   return post('/register');
 }
+
+export async function deleteAccountRequest() {
+  const user = getAuth().currentUser;
+  if (!user) throw new Error('Нет сессии.');
+  const res = await fetch(`${OTP_SERVER_URL}/account`, {
+    method:'DELETE',
+    headers: {
+      Authorization: `Bearer ${await getIdToken(user)}`,
+    },
+  });
+  const data = (await res.json().catch(() => ({}))) as OtpResponse;
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error ?? 'не удалось удалить.');
+  }
+  return data;
+}
