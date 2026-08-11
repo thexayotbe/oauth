@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, StyleSheet, Text, TextInput, TouchableOpacity, View,KeyboardAvoidingView, Platform } from 'react-native';
 import { requestEmailCode, signInWithEmailCode } from '../auth/emailAuth';
-import { sendEmailOtp } from '../api/otpApi';
+import { sendEmailOtp, verifyEmailOtp } from '../api/otpApi';
 
 type Props = { onSignedIn: () => void; onCancel: () => void };
 
@@ -65,8 +65,10 @@ export default function EmailScreen({ onSignedIn, onCancel }: Props) {
     return run(async () => {
       Keyboard.dismiss();
       await new Promise<void>(resolve => setTimeout(resolve, 300));
-      await signInWithEmailCode(email.trim(), code);
-      onSignedIn(); // явно на home
+      const result = await verifyEmailOtp(email.trim(), code);
+      if (!result.ok) throw new Error(result.error ?? 'неверный код');
+
+      onSignedIn();
 
     });
   };
