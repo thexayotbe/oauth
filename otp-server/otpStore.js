@@ -1,21 +1,8 @@
-const path = require('path');
+const {getFirestore, FieldValue} = require('firebase-admin/firestore');
 const crypto = require('crypto');
-const Database = require('better-sqlite3');
+require('./firebase');
 
-const db = new Database(path.join(__dirname, 'otp.db'));
-
-
-const db = new Database(path.join(__dirname, 'otp.db'));
-db.pragma('journal_mode = WAL');
-db.exec(`
-    CREATE TABLE IF NOT EXISTS otps (
-        id         TEXT PRIMARY KEY,
-        code_hash  BLOB NOT NULL,
-        expires_at INTEGER NOT NULL,
-        attempts   INTEGER NOT NULL DEFAULT 0
-    )
-`);
-
+const otps = getFirestore().collection('otps');
 
 
 
@@ -28,43 +15,48 @@ function hashCode(code){
 }
 
 
-function issue(id){
-    const code = String(crypto.randomInt(100000, 999999));
+async function issue(id){
+    const code = String(crypto.randomInt(100000, 1000000));
 
-    db.prepare('INSERT INTO otps (id, code_hash, expires_at, attempts) VALUES (?, ?, ?, 0)').run(id, hashCode(code), Date.now() + LIFE_T);
+   await otps.doc(id).set({
+    codeHash: hashCode(code),
+    expiresAt: Date.now() + LIFE_T,
+    attempts: 0,
+    lastSentAt: Date.now()
+   })
 
     return code;
 }
 
 
 
-function verifyCode(id, code){
-    const row = db.prepare('SELECT * FROM otp WHERE id = ?').get(id);
+async function verifyCode(id, code){
 
+    const ref = otps.doc(id);
+    const snap = await ref.get();
 
-    if(!row || row.expires_at < Date.now()){
-        db.prepare('DELETE FROM otps WHERE id = ?').run(id);
-        return "код истек"
+    if(!snap.exists || snap.data().expiresAt < Date.now()){
+        await ref.delete();
+        return "код истек";
     }
+    const row = snap.data();
 
     if (row.attempts >= MAX_ATTEMPTS){
-        db.prepare('DELETE FROM otps WHERE id = ?').run(id);
-        return "много попыток"
+        await ref.delete();
+        return "много попыток";
     }
 
-    if(!crypto.timingSafeEqual(row.code_hash, hashCode(code))){
-        db.prepare('UPDATE otps SET attempts = attempts + 1 where id = ?').run(id);
-        return "неверный код"
+    if(!crypto.timingSafeEqual(row.codeHash, hashCode(code))){
+        await ref.update({attempts: FieldValue.increment(1)});
+        return "неверный код";
     }
-    return null
+    return null;
 }
 
-function consume(id){
-    db.prepare('DELETE FROM otps WHERE id = ?').run(id);
+async function consume(id){
+    await otps.doc(id).delete();
 }
 
-function purgeExpired(){
-    db.prepare('DELETE FROM otps WHERE expires_at < ?').run(Date.now());
-}
 
-module.exports = {issue, verifyCode, consume, purgeExpired}
+
+module.exports = {issue, verifyCode, consume}

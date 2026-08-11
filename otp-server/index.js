@@ -5,7 +5,7 @@ const path = require('path');
 const express = require('express');
 const nodemailer = require('nodemailer');
 const TelegramBot = require('node-telegram-bot-api');
-
+const {issue, verifyCode, consume} = require('./otpStore');
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) throw new Error('Set TELEGRAM_BOT_TOKEN in otp-server/.env before starting the server.');
 
@@ -14,7 +14,6 @@ const OTP_LIFETIME_MS = 5 * 60 * 1000;
 
 const bot = new TelegramBot(token, { polling: true });
 const app = express();
-const otpStore = new Map();
 const contacts = loadContacts();
 const mailer = createMailer();
 
@@ -53,26 +52,7 @@ function createMailer() {
   });
 }
 
-function issueCode(key) {
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  otpStore.set(key, { code, expiresAt: Date.now() + OTP_LIFETIME_MS });
-  return code;
-}
 
-function validateCode(key, code) {
-  const entry = otpStore.get(key);
-
-  if (!entry || entry.expiresAt < Date.now()) {
-    otpStore.delete(key);
-    return 'Код истёк или не найден. Запросите новый.';
-  }
-
-  if (entry.code !== code) {
-    return 'Неверный код.';
-  }
-
-  return null;
-}
 
 bot.onText(/\/start/, (message) => {
   bot.sendMessage(
@@ -114,24 +94,24 @@ app.post('/send-otp', async (req, res) => {
     });
   }
 
-  const code = issueCode(phone);
+  const code = await issue(phone);
 
   try {
     await bot.sendMessage(chatId, `Код подтверждения: ${code}`);
     return res.json({ ok: true });
   } catch {
-    otpStore.delete(phone);
+    await consume(phone);
     return res.status(502).json({ ok: false, error: 'Не удалось отправить код в Telegram.' });
   }
 });
 
-app.post('/verify-otp', (req, res) => {
+app.post('/verify-otp', async (req, res) => {
   const phone = onlyDigits(req.body.phone);
-  const error = validateCode(phone, onlyDigits(req.body.code));
+  const error = await verifyCode(phone, onlyDigits(req.body.code));
 
   if (error) return res.status(400).json({ ok: false, error });
 
-  otpStore.delete(phone);
+  await consume(phone);
   return res.json({ ok: true });
 });
 
@@ -148,7 +128,7 @@ app.post('/send-email-otp', async (req, res) => {
     });
   }
 
-  const code = issueCode(email);
+  const code = await issue(email);
 
   try {
     await mailer.sendMail({
@@ -159,18 +139,18 @@ app.post('/send-email-otp', async (req, res) => {
     });
     return res.json({ ok: true });
   } catch {
-    otpStore.delete(email);
+    await consume(email);
     return res.status(502).json({ ok: false, error: 'Не удалось отправить письмо.' });
   }
 });
 
-app.post('/verify-email-otp', (req, res) => {
+app.post('/verify-email-otp', async (req, res) => {
   const email = normalizeEmail(req.body.email);
-  const error = validateCode(email, onlyDigits(req.body.code));
+  const error = await verifyCode(email, onlyDigits(req.body.code));
 
   if (error) return res.status(400).json({ ok: false, error });
 
-  otpStore.delete(email);
+  await consume(email);
   return res.json({ ok: true });
 });
 
