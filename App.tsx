@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StatusBar, StyleSheet ,ActivityIndicator, View} from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AuthScreen from './src/screens/AuthScreen';
@@ -26,19 +26,27 @@ async function fetchIsActive(user: { getIdToken: () => Promise<string> }) {
 export default function App() {
   const [step, setStep] = useState<Step>('auth');
   const [ready, setReady] = useState(false);
+  const booted = useRef(false);
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(getAuth(), async user => {
-      if (!user) {
-        setStep('auth');
-      } else {
-        // только firestore isActive, не otpVerified claim
-        setStep((await fetchIsActive(user)) ? 'done' : 'otp');
-      }
+useEffect(() => {
+  const unsub = onAuthStateChanged(getAuth(), async user => {
+    if (!user) {
+      setStep('auth');
       setReady(true);
-    });
-    return unsub;
-  }, []);
+      booted.current = true;
+      return;
+    }
+    if (!booted.current) {
+      booted.current = true;
+      setStep((await fetchIsActive(user)) ? 'done' : 'otp');
+      setReady(true);
+      return;
+    }
+    setReady(true);
+  });
+  return unsub;
+}, []);
+
 
   if (!ready) {
     return (

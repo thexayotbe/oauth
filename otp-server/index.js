@@ -114,7 +114,16 @@ app.post('/send-otp', async (req, res) => {
     });
   }
 
-  const code = await issue(phone);
+  const result = await issue(phone);
+
+  if(result.retryAfter){
+    return res.json({
+      ok: false,
+      error: 'слишком мноого',
+      retryAfter: result.retryAfter,
+    })
+  }
+  const code = result.code;
 
   try {
     await bot.sendMessage(chatId, `Код подтверждения: ${code}`);
@@ -160,7 +169,16 @@ app.post('/send-email-otp', async (req, res) => {
     });
   }
 
-  const code = await issue(email);
+  const result = await issue(email);
+
+  if(result.retryAfter){
+    return res.json({
+      ok: false,
+      error: 'слишком мноого',
+      retryAfter: result.retryAfter,
+    })
+  }
+  const code = result.code;
 
   try {
     await mailer.sendMail({

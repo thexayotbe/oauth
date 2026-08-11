@@ -15,6 +15,7 @@ type OtpResponse = {
   firebaseToken?: string;
   isActive?: boolean;
   user?: UserDoc | null;
+  retryAfter?: number;
 };
 
 async function post(path: string, body: Record<string, string> = {}): Promise<OtpResponse> {

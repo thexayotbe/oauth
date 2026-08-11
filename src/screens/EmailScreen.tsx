@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Keyboard, StyleSheet, Text, TextInput, TouchableOpacity, View,KeyboardAvoidingView, Platform } from 'react-native';
 import { requestEmailCode, signInWithEmailCode } from '../auth/emailAuth';
+import { sendEmailOtp } from '../api/otpApi';
 
 type Props = { onSignedIn: () => void; onCancel: () => void };
 
@@ -10,6 +11,15 @@ export default function EmailScreen({ onSignedIn, onCancel }: Props) {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [coolDown, setCoolDown] = useState(0);
+
+  
+  useEffect(() => {
+    if (coolDown <= 0) return;
+    const t = setInterval(() => setCoolDown(c => c - 1), 1000);
+    return () => clearInterval(t);
+  }, [coolDown]);
+
 
   const run = async (action: () => Promise<void>) => {
     setLoading(true);
@@ -23,24 +33,46 @@ export default function EmailScreen({ onSignedIn, onCancel }: Props) {
     }
   };
 
-  const send = () => {
+  const send = async () => {
     if (!email.trim()) return setError('Введите email.');
-    return run(async () => {
-      await requestEmailCode(email.trim());
-      setSent(true);
-    });
+    Keyboard.dismiss();
+    setLoading(true);
+    setError('');
+
+    try{
+      const result = await sendEmailOtp(email.trim());
+      if(result.retryAfter){
+        setCoolDown(result.retryAfter);
+        setError(result.error ?? 'слишком мноого');
+        return;
+      }
+      if (result.ok) {
+        setSent(true);
+        setCoolDown(60);
+      }
+      else setError(result.error ?? 'Не удалось отправить код.');
+    }
+    catch(actionError){
+      setError(actionError instanceof Error ? actionError.message : 'Что-то пошло не так.');
+    }
+    finally{
+      setLoading(false);
+    }
   };
 
   const verify = () => {
     if (code.length !== 6) return setError('Введите 6-значный код.');
     return run(async () => {
+      Keyboard.dismiss();
+      await new Promise<void>(resolve => setTimeout(resolve, 300));
       await signInWithEmailCode(email.trim(), code);
-      onSignedIn();
+      onSignedIn(); // явно на home
+
     });
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Text style={styles.title}>Вход по email</Text>
       {!!error && <Text style={styles.error}>{error}</Text>}
       {!sent ? (
@@ -69,6 +101,13 @@ export default function EmailScreen({ onSignedIn, onCancel }: Props) {
             value={code}
           />
           <Button disabled={loading} label="Подтвердить" onPress={verify} />
+          {coolDown > 0 ? (
+              <Text style={styles.link}>Повторить через {coolDown}с</Text>
+            ) : (
+              <TouchableOpacity disabled={loading} onPress={send}>
+                <Text style={styles.link}>Отправить код ещё раз</Text>
+              </TouchableOpacity>
+            )}
           <TouchableOpacity
             disabled={loading}
             onPress={() => {
@@ -84,7 +123,7 @@ export default function EmailScreen({ onSignedIn, onCancel }: Props) {
         <Text style={styles.link}>Другой способ входа</Text>
       </TouchableOpacity>
       {loading && <ActivityIndicator style={styles.spinner} />}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -99,6 +138,8 @@ function Button({ disabled, label, onPress }: { disabled: boolean; label: string
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', padding: 24 },
   title: { fontSize: 26, fontWeight: '700', marginBottom: 24, textAlign: 'center' },
+  flex: { flex: 1, backgroundColor: '#fff' },
+  content: { flexGrow: 1, justifyContent: 'center', padding: 24, backgroundColor: '#fff' },
   label: { color: '#333', lineHeight: 21, marginBottom: 12 },
   input: { borderColor: '#bbb', borderRadius: 8, borderWidth: 1, marginBottom: 16, padding: 12 },
   button: { backgroundColor: '#0a7d33', borderRadius: 8, padding: 14 },
