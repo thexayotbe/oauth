@@ -8,7 +8,8 @@ const TelegramBot = require('node-telegram-bot-api');
 const {issue, verifyCode, consume} = require('./otpStore');
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) throw new Error('Set TELEGRAM_BOT_TOKEN in otp-server/.env before starting the server.');
-
+const {auth} = require('./firebase');
+const { getFirestore } = require('firebase-admin/firestore');
 const CONTACTS_FILE = path.join(__dirname, 'contacts.json');
 const OTP_LIFETIME_MS = 5 * 60 * 1000;
 
@@ -16,6 +17,7 @@ const bot = new TelegramBot(token, { polling: true });
 const app = express();
 const contacts = loadContacts();
 const mailer = createMailer();
+const db = getFirestore();
 
 app.use(express.json());
 
@@ -52,8 +54,22 @@ function createMailer() {
   });
 }
 
-
-
+async function ensureUser(email) {
+    try {
+      return await auth.getUserByEmail(email);
+    }catch(e){
+      return await auth.createUser({email, emailVerified: true})
+    }
+}
+async function saveUserDoc(user) {
+  await db.collection('users').doc(user.uid).set(
+    {
+      email: user.email,
+      createdAt: Date.now(),
+    },
+    { merge: true },
+  );
+}
 bot.onText(/\/start/, (message) => {
   bot.sendMessage(
     message.chat.id,
@@ -150,8 +166,14 @@ app.post('/verify-email-otp', async (req, res) => {
 
   if (error) return res.status(400).json({ ok: false, error });
 
+  const user = await ensureUser(email);
+  await saveUserDoc(user);
+
+  await auth.setCustomUserClaims(user.uid, {otpVerified: true});
+  const firebaseToken = await auth.createCustomToken(user.uid);
   await consume(email);
-  return res.json({ ok: true });
+  return res.json({ ok: true, firebaseToken });
 });
+
 
 app.listen(process.env.PORT || 3000, '0.0.0.0', () => console.log('OTP server listening.'));

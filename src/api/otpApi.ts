@@ -1,6 +1,6 @@
 import { OTP_SERVER_URL } from '../config/authConfig';
 
-type OtpResponse = { ok: boolean; error?: string };
+type OtpResponse = { ok: boolean; error?: string, firebaseToken?: string};
 
 async function post(path: string, body: Record<string, string>): Promise<OtpResponse> {
   let response: Response;
