@@ -8,7 +8,9 @@ const TelegramBot = require('node-telegram-bot-api');
 const {issue, verifyCode, consume} = require('./otpStore');
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) throw new Error('Set TELEGRAM_BOT_TOKEN in otp-server/.env before starting the server.');
-const {auth} = require('./firebase');
+
+const {auth, requireAuth} = require('./firebase');
+
 const { getFirestore } = require('firebase-admin/firestore');
 const CONTACTS_FILE = path.join(__dirname, 'contacts.json');
 const OTP_LIFETIME_MS = 5 * 60 * 1000;
@@ -66,6 +68,8 @@ async function saveUserDoc(user) {
     {
       email: user.email,
       createdAt: Date.now(),
+      provider: "email",
+      isActive:true,
     },
     { merge: true },
   );
@@ -121,11 +125,23 @@ app.post('/send-otp', async (req, res) => {
   }
 });
 
-app.post('/verify-otp', async (req, res) => {
+app.post('/verify-otp', requireAuth, async (req, res) => {
   const phone = onlyDigits(req.body.phone);
   const error = await verifyCode(phone, onlyDigits(req.body.code));
 
   if (error) return res.status(400).json({ ok: false, error });
+
+  await db.collection('users').doc(req.user.uid).set(
+    {
+      phone: `+${phone}`,
+      isActive: true,
+      activatedAt: Date.now(),
+    },
+    { merge: true },
+  );
+  const existing = (await auth.getUser(req.user.uid)).customClaims ?? {};
+
+  await auth.setCustomUserClaims(req.user.uid, { ...existing, otpVerified: true });
 
   await consume(phone);
   return res.json({ ok: true });
@@ -173,6 +189,36 @@ app.post('/verify-email-otp', async (req, res) => {
   const firebaseToken = await auth.createCustomToken(user.uid);
   await consume(email);
   return res.json({ ok: true, firebaseToken });
+});
+
+
+app.post('/register', requireAuth, async(req,res)=>{
+  const uid = req.user.uid;
+  const ref = db.collection('users').doc(uid);
+  const snap = await ref.get();
+  const patch = {
+    email: req.user.email ?? null,
+    provider: req.user.firebase?.sign_in_provider ?? 'unknown',
+  };
+
+  if(!snap.exists){
+    await ref.set({
+      ...patch,
+      isActive: false,
+      createdAt: Date.now(),
+    })
+  }
+  else {
+    await ref.set(patch, { merge: true });
+  }
+
+  const user = (await ref.get()).data();
+  return res.json({ok:true, user});
+})
+app.get('/me', requireAuth, async (req, res) => {
+  const snap = await db.collection('users').doc(req.user.uid).get();
+  if (!snap.exists) return res.json({ ok: true, isActive: false });
+  return res.json({ ok: true, isActive: !!snap.data().isActive });
 });
 
 

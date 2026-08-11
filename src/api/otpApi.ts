@@ -1,13 +1,37 @@
+import { getAuth, getIdToken } from '@react-native-firebase/auth';
 import { OTP_SERVER_URL } from '../config/authConfig';
 
-type OtpResponse = { ok: boolean; error?: string, firebaseToken?: string};
+type UserDoc = {
+  email?: string | null;
+  provider?: string;
+  isActive?: boolean;
+  phone?: string;
+  createdAt?: number;
+};
 
-async function post(path: string, body: Record<string, string>): Promise<OtpResponse> {
+type OtpResponse = {
+  ok: boolean;
+  error?: string;
+  firebaseToken?: string;
+  isActive?: boolean;
+  user?: UserDoc | null;
+};
+
+async function post(path: string, body: Record<string, string> = {}): Promise<OtpResponse> {
+  const headers:Record<string, string> = { 'Content-Type': 'application/json' };
+
+  const user = getAuth().currentUser;
+  if(user){
+    headers['Authorization'] = `Bearer ${await getIdToken(user)}`;
+  }
+
+
+
   let response: Response;
   try {
     response = await fetch(`${OTP_SERVER_URL}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
     });
   } catch {
@@ -35,4 +59,8 @@ export function sendEmailOtp(email: string) {
 
 export function verifyEmailOtp(email: string, code: string) {
   return post('/verify-email-otp', { email, code });
+}
+
+export function registerUser() {
+  return post('/register');
 }

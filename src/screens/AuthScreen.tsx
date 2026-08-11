@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { signInWithFacebook } from '../auth/facebookAuth';
 import { signInWithGoogle } from '../auth/googleAuth';
-
-type Props = { onSignedIn: () => void; onEmailSelected: () => void };
+import { registerUser } from '../api/otpApi';
+type Props = {
+  onSignedIn: (isActive: boolean) => void;
+  onEmailSelected: () => void;
+};
 
 function messageFrom(error: unknown) {
   if (!(error instanceof Error)) {
@@ -23,7 +26,8 @@ export default function AuthScreen({ onSignedIn, onEmailSelected }: Props) {
     setError('');
     try {
       await provider();
-      onSignedIn();
+      const res = await registerUser();
+      onSignedIn(!!res.user?.isActive);
     } catch (signInError) {
       setError(messageFrom(signInError));
     } finally {

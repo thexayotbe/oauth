@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { sendOtp, verifyOtp } from '../api/otpApi';
-
+import { getAuth, getIdTokenResult } from '@react-native-firebase/auth';
 type Props = { onVerified: () => void };
 
 export default function OtpScreen({ onVerified }: Props) {
@@ -27,7 +27,12 @@ export default function OtpScreen({ onVerified }: Props) {
     setLoading(true); setError('');
     try {
       const result = await verifyOtp(phone.trim(), code);
-      if (result.ok) onVerified(); else setError(result.error ?? 'Неверный код.');
+      if (!result.ok) {
+        setError(result.error ?? 'Неверный код.');
+        return;
+      }
+      await getIdTokenResult(getAuth().currentUser!, true);
+      onVerified()
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Не удалось проверить код.');
     } finally { setLoading(false); }
