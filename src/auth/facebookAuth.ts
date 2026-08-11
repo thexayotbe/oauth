@@ -4,6 +4,7 @@ import {
   getAuth,
   signInWithCredential,
 } from '@react-native-firebase/auth';
+import { rethrowIfAccountExists } from './accountLinking';
 
 export async function signInWithFacebook() {
   await Settings.setAdvertiserTrackingEnabled(true);
@@ -24,8 +25,12 @@ export async function signInWithFacebook() {
     throw new Error('Facebook не вернул токен доступа.');
   }
 
-  return signInWithCredential(
-    getAuth(),
-    FacebookAuthProvider.credential(accessToken.accessToken),
-  );
+  try {
+    return await signInWithCredential(
+      getAuth(),
+      FacebookAuthProvider.credential(accessToken.accessToken),
+    );
+  } catch (error) {
+    await rethrowIfAccountExists(error);
+  }
 }

@@ -63,13 +63,51 @@ async function ensureUser(email) {
       return await auth.createUser({email, emailVerified: true})
     }
 }
+async function getEmailAccountInfo(email) {
+  try {
+    const user = await auth.getUserByEmail(email);
+    const ids = (user.providerData || []).map(p => p.providerId);
+    const snap = await db.collection('users').doc(user.uid).get();
+    const docProvider = snap.exists ? snap.data().provider : null;
+    const claimMethod = user.customClaims?.authMethod;
+
+    if (claimMethod === 'email' || docProvider === 'email') {
+      return { exists: true, kind: 'email', uid: user.uid };
+    }
+    if (ids.includes('google.com')) {
+      return { exists: true, kind: 'google', uid: user.uid };
+    }
+    if (ids.includes('facebook.com')) {
+      return { exists: true, kind: 'facebook', uid: user.uid };
+    }
+    return { exists: true, kind: 'email', uid: user.uid };
+  } catch {
+    return { exists: false, kind: null, uid: null };
+  }
+}
+async function socialProviderForEmail(email) {
+  const info = await getEmailAccountInfo(email);
+  if (!info.exists) return null;
+  if (info.kind === 'email') return null;
+  return info.kind;
+}
+
+function socialConflictPayload(provider) {
+  const label = provider === 'google' ? 'Google' : 'Facebook';
+  return {
+    ok: false,
+    error: `этот email уже используется через ${label}. войдите через ${label}.`,
+    existingProvider: provider,
+  };
+}
 async function saveUserDoc(user) {
   await db.collection('users').doc(user.uid).set(
     {
       email: user.email,
       createdAt: Date.now(),
-      provider: "email",
-      isActive:true,
+      provider: 'email',
+      authMethod: 'email',
+      isActive: true,
     },
     { merge: true },
   );
@@ -169,6 +207,11 @@ app.post('/send-email-otp', async (req, res) => {
     });
   }
 
+  const social = await socialProviderForEmail(email);
+  if (social) {
+    return res.status(409).json(socialConflictPayload(social));
+  }
+
   const result = await issue(email);
 
   if(result.retryAfter){
@@ -200,34 +243,67 @@ app.post('/verify-email-otp', async (req, res) => {
 
   if (error) return res.status(400).json({ ok: false, error });
 
+  const social = await socialProviderForEmail(email);
+  if (social) {
+    return res.status(409).json(socialConflictPayload(social));
+  }
+
   const user = await ensureUser(email);
   await saveUserDoc(user);
 
-  await auth.setCustomUserClaims(user.uid, {otpVerified: true});
+  const existing = (await auth.getUser(user.uid)).customClaims ?? {};
+  await auth.setCustomUserClaims(user.uid, {
+    ...existing,
+    otpVerified: true,
+    authMethod: 'email',
+  });
   const firebaseToken = await auth.createCustomToken(user.uid);
   await consume(email);
   return res.json({ ok: true, firebaseToken });
 });
 
 
+app.post('/check-email', async (req, res) => {
+  const email = normalizeEmail(req.body.email);
+  if (!isEmail(email)) {
+    return res.status(400).json({ ok: false, error: 'ykажите корректный email.' });
+  }
+  const info = await getEmailAccountInfo(email);
+  return res.json({
+    ok: true,
+    exists: info.exists,
+    kind: info.kind,
+  });
+});
 app.post('/register', requireAuth, async(req,res)=>{
   const uid = req.user.uid;
   const ref = db.collection('users').doc(uid);
   const snap = await ref.get();
+  const incoming = req.user.firebase?.sign_in_provider ?? 'unknown';
   const patch = {
     email: req.user.email ?? null,
-    provider: req.user.firebase?.sign_in_provider ?? 'unknown',
+    provider: incoming,
   };
 
-  if(!snap.exists){
+  if (snap.exists) {
+    const prev = snap.data();
+    if (
+      (prev.provider === 'email' || prev.authMethod === 'email') &&
+      (incoming === 'google.com' || incoming === 'facebook.com')
+    ) {
+      return res.status(409).json({
+        ok: false,
+        error: 'этот email уже зарегистрирован через email..',
+        existingProvider: 'email',
+      });
+    }
+    await ref.set(patch, { merge: true });
+  } else {
     await ref.set({
       ...patch,
       isActive: false,
       createdAt: Date.now(),
-    })
-  }
-  else {
-    await ref.set(patch, { merge: true });
+    });
   }
 
   const user = (await ref.get()).data();

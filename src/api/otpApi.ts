@@ -16,6 +16,9 @@ type OtpResponse = {
   isActive?: boolean;
   user?: UserDoc | null;
   retryAfter?: number;
+  existingProvider?: 'google' | 'facebook' | 'email';
+  exists?: boolean;
+  kind?: 'email' | 'google' | 'facebook' | null;
 };
 
 async function post(path: string, body: Record<string, string> = {}): Promise<OtpResponse> {
@@ -66,6 +69,9 @@ export function registerUser() {
   return post('/register');
 }
 
+export function checkEmailAccount(email: string) {
+  return post('/check-email', { email });
+}
 export async function deleteAccountRequest() {
   const user = getAuth().currentUser;
   if (!user) throw new Error('Нет сессии.');

@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { signInWithFacebook } from '../auth/facebookAuth';
 import { signInWithGoogle } from '../auth/googleAuth';
 import { registerUser } from '../api/otpApi';
+import { signOutEverywhere } from '../auth/signOut';
 type Props = {
   onSignedIn: (isActive: boolean) => void;
   onEmailSelected: () => void;
@@ -12,9 +13,7 @@ function messageFrom(error: unknown) {
   if (!(error instanceof Error)) {
     return 'Не удалось войти. Попробуйте снова.';
   }
-
-  const code = (error as { code?: string }).code;
-  return code ? `${error.message} (${code})` : error.message;
+  return error.message;
 }
 
 export default function AuthScreen({ onSignedIn, onEmailSelected }: Props) {
@@ -27,6 +26,10 @@ export default function AuthScreen({ onSignedIn, onEmailSelected }: Props) {
     try {
       await provider();
       const res = await registerUser();
+      if (!res.ok) {
+        await signOutEverywhere();
+        throw new Error(res.error ?? 'Не удалось зарегистрировать пользователя.');
+      }
       onSignedIn(!!res.user?.isActive);
     } catch (signInError) {
       setError(messageFrom(signInError));
